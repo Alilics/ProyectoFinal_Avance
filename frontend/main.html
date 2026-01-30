@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>NoteIT</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="main-header">
+    <h1>Proyecto Full Stack</h1>
+    <button class="logout-btn" onclick="logout()">Salir</button>
+  </header>
+
+  <main class="card">
+
+    <!-- Formulario para notas -->
+    <section class="notes-section">
+
+      <div class="notes-header-box">
+        <h3>Notas</h3>
+        <p id="notesMessage" class="notes-message"></p>
+      </div>
+
+      <form id="noteForm" class="note-form">
+        <input type="text" id="noteTitle" placeholder="Título de la nota" required>
+        <textarea id="noteContent" placeholder="Contenido de la nota" required></textarea>
+        <button type="submit">Crear nota</button>
+      </form>
+
+      <div id="notesList"></div>
+    </section>
+
+
+    <button id="btnGuardar" onclick="guardarCambios()" style="display:none;">Guardar</button>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
