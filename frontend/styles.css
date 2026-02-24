@@ -180,11 +180,15 @@ body {
 
 .card {
   background: #F1DFDD;
-  max-width: 600px;
-  margin: 3rem auto;
+  /* hacer más ancho y alto para acomodar más notas */
+  max-width: 90vw;
+  width: 90vw;
+  max-height: 80vh;
+  margin: 1rem auto;
   padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 15px 30px rgba(74, 32, 42, 0.25);
+  overflow-y: auto; /* permitir scroll cuando hay demasiadas notas */
 }
 
 .tech ul {
@@ -196,9 +200,37 @@ body {
   margin-bottom: 1.5rem;
 }
 
+/* buscador de notas por autor */
+.search-box {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.search-box input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #D86487;
+  border-radius: 6px;
+}
+
+.search-box button {
+  padding: 6px 12px;
+  background: #D86487;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.search-box button:hover {
+  background: #76172C;
+}
+
 #notesList {
   display: grid;
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  /* cinco columnas horizontales para quepan cinco notas de lado a lado */
+  grid-template-columns: repeat(5, minmax(160px, 1fr));
   gap: 1rem;
   direction: ltr;
 }

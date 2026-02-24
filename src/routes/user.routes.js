@@ -2,30 +2,40 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const auth = require('../middlewares/auth.middleware');
+const { authMiddleware, requireRole } = require('../middlewares/auth.middleware');
+const { validateUser } = require('../middlewares/validation.middleware');
 
 const router = express.Router();
 
-/* CREATE (PROTEGIDO) */
-router.post('/', auth, async (req, res, next) => {
+/* CREATE (PROTEGIDO - sólo Admin) */
+router.post('/', authMiddleware, requireRole('Admin'), validateUser, async (req, res, next) => {
   try {
-    const { nombre, email, password } = req.body;
+    const { nombre, email, password, role } = req.body;
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const usuario = await User.create({
       nombre,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      role: role || 'User'
     });
 
-    res.status(201).json(usuario);
+    res.status(201).json({
+      mensaje: 'Usuario creado correctamente',
+      usuario: {
+        id: usuario._id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        role: usuario.role
+      }
+    });
   } catch (error) {
     next(error);
   }
 });
 
-/* READ (PÚBLICO) */
-router.get('/', async (req, res, next) => {
+/* READ (sólo Admin) */
+router.get('/', authMiddleware, requireRole('Admin'), async (req, res, next) => {
   try {
     const usuarios = await User.find().select('-password');
     res.json(usuarios);
@@ -34,18 +44,30 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-/* UPDATE (PROTEGIDO) */
-router.put('/:id', auth, async (req, res, next) => {
+/* UPDATE (PROTEGIDO - owner o Admin) */
+router.put('/:id', authMiddleware, async (req, res, next) => {
   try {
-    const usuario = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    // sólo el usuario mismo o un Admin puede actualizar
+    if (req.usuario.id !== req.params.id && req.usuario.role !== 'Admin') {
+      return res.status(403).json({ mensaje: 'Permiso insuficiente' });
+    }
+    const updates = { ...req.body };
+    if (updates.password) {
+      updates.password = await bcrypt.hash(updates.password, 10);
+    }
+    // si se intenta cambiar el rol y quien hace la petición no es admin, bloquearlo
+    if (updates.role && req.usuario.role !== 'Admin') {
+      delete updates.role;
+    }
+    const usuario = await User.findByIdAndUpdate(req.params.id, updates, { new: true });
     res.json(usuario);
   } catch (error) {
     next(error);
   }
 });
 
-/* DELETE (PROTEGIDO) */
-router.delete('/:id', auth, async (req, res, next) => {
+/* DELETE (PROTEGIDO - sólo Admin) */
+router.delete('/:id', authMiddleware, requireRole('Admin'), async (req, res, next) => {
   try {
     await User.findByIdAndDelete(req.params.id);
     res.json({ mensaje: 'Usuario eliminado' });
@@ -73,7 +95,10 @@ router.post('/register', async (req, res, next) => {
     });
 
     // Retornamos datos sin la contraseña
-    res.status(201).json({ id: usuario._id, nombre: usuario.nombre, email: usuario.email });
+    res.status(201).json({
+      mensaje: 'Cuenta creada correctamente',
+      usuario: { id: usuario._id, nombre: usuario.nombre, email: usuario.email }
+    });
   } catch (error) {
     next(error);
   }
@@ -95,7 +120,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     const token = jwt.sign(
-      { id: usuario._id, email: usuario.email },
+      { id: usuario._id, email: usuario.email, role: usuario.role },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );

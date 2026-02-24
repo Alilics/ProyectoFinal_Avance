@@ -10,6 +10,19 @@
   <div class="login-container">
     <h2>Bienvenido</h2>
     <p>Elige cómo deseas ingresar</p>
+    <div id="errorMsg" style="color:#c00;font-weight:bold;margin-top:1rem;"></div>
+    <script>
+      // show message if redirected due to React failure
+      var params=new URLSearchParams(window.location.search);
+      if(params.get('error')){
+        var msg='Ha ocurrido un error al cargar la aplicación React.';
+        if(params.get('error')==='react_not_loaded') msg+=' Usando formulario clásico.';
+        if(params.get('error')==='react_exception') msg+=' Se produjo una excepción.';
+        document.getElementById('errorMsg').textContent=msg;
+      }
+      // espacio para el mensaje de login/registro
+      // se deja el elemento vacío; el código de script.js lo llenará según sea necesario
+    </script>
 
     <div class="login-wrapper">
       <div class="login-column register-box">
@@ -26,6 +39,11 @@
         <h3>Ingresar</h3>
         <button class="guest-btn" onclick="entrarGuest()">Entrar como invitado</button>
 
+        <!-- El botón de Google siempre aparece; si no hay credenciales la ruta devolverá mensaje de error -->
+        <button id="googleBtn" class="google-btn">
+          Entrar con Google
+        </button>
+
         <hr>
 
         <form id="loginForm">
@@ -33,10 +51,11 @@
           <input type="password" id="password" placeholder="Contraseña" required>
           <button type="submit">Iniciar sesión</button>
         </form>
+        <!-- área donde el script mostrará mensajes de error/éxito -->
+        <p id="mensaje" style="color:#c00;margin-top:1rem;"></p>
       </div>
     </div>
 
-    <p id="mensaje"></p>
   </div>
 
   <script src="script.js"></script>

@@ -1,6 +1,16 @@
 const mongoose = require('mongoose');
 
 const conectarDB = async () => {
+  // no volver a conectar si ya existe conexión
+  if (mongoose.connection.readyState >= 1) {
+    return;
+  }
+
+  if (process.env.NODE_ENV === 'test') {
+    // durante los tests se maneja la conexión en tests/setup.js
+    return;
+  }
+
   try {
     await mongoose.connect(process.env.MONGODB_URI);
     console.log('MongoDB conectado');

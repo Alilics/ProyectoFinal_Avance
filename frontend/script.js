@@ -1,6 +1,31 @@
+// global error catcher para evitar que un fallo JS deje la página en blanco
+window.onerror = function(message, source, lineno, colno, error) {
+  console.error('JS error', message, 'at', source + ':' + lineno + ':' + colno, error);
+  alert(`Error de script: ${message} (línea ${lineno})`);
+};
+
 // Variables globales (se usan en login y main)
-const isGuest = localStorage.getItem('guest');
-const token = localStorage.getItem('token');
+// proteger en caso de que localStorage esté deshabilitado
+const storage = (typeof localStorage !== 'undefined' ? localStorage : {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {}
+});
+
+const isGuest = storage.getItem('guest');
+let token = storage.getItem('token');
+// si el token llega en la query string tras OAuth, guardarlo
+try {
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('token')) {
+    token = params.get('token');
+    storage.setItem('token', token);
+    // limpiar url para no exponer el token en el historial
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+} catch (e) {
+  console.warn('No se pudo leer query params', e);
+}
 
 const btnEditar = document.getElementById('btnEditar');
 const btnGuardar = document.getElementById('btnGuardar');
@@ -8,14 +33,17 @@ const btnGuardar = document.getElementById('btnGuardar');
 const campos = ['titulo', 'parrafo1', 'parrafo2'];
 
 /* REDIRECCIONES AUTOMÁTICAS */
-// En la página de login, si ya estamos autenticados (token o guest) vamos a /main
+// En la página de login, si ya estamos autenticados (token o guest) vamos a /main.html
 if (window.location.pathname.endsWith('login.html') || window.location.pathname === '/') {
   if (isGuest || token) {
-    window.location.href = '/main';
+    window.location.href = '/main.html';
   }
 }
 
 // En la página principal, si no hay token ni guest volvemos al login
+// admitimos tanto /main como /main.html (por compatibilidad) pero redirigimos
+// los enlaces a la versión con extensión para que el servidor entregue el
+// archivo estático en lugar de index.html de redirección.
 if (window.location.pathname.endsWith('main.html') || window.location.pathname === '/main') {
   if (!isGuest && !token) {
     window.location.href = '/';
@@ -63,7 +91,15 @@ function guardarCambios() {
 function entrarGuest() {
   localStorage.setItem('guest', 'true');
   localStorage.removeItem('token');
-  window.location.href = '/main';
+  window.location.href = '/main.html';
+}
+
+// Manejar botón de Google
+const googleBtn = document.getElementById('googleBtn');
+if (googleBtn) {
+  googleBtn.addEventListener('click', () => {
+    window.location.href = '/auth/google';
+  });
 }
 
 // Manejar envío del formulario de login
@@ -96,7 +132,7 @@ if (loginForm) {
       localStorage.removeItem('guest');
 
       // Redirigir a la página principal
-      window.location.href = '/main';
+      window.location.href = '/main.html';
     } catch (err) {
       mensaje.innerText = 'Error de conexión';
       mensaje.style.color = 'red';
@@ -130,7 +166,8 @@ if (registerForm) {
         return;
       }
 
-      mensaje.innerText = 'Cuenta creada correctamente. Puedes iniciar sesión.';
+      // mostrar el mensaje que nos envía el servidor (ej. "Cuenta creada correctamente")
+      mensaje.innerText = data.mensaje || 'Cuenta creada correctamente. Puedes iniciar sesión.';
       mensaje.style.color = 'green';
       registerForm.reset();
     } catch (err) {
@@ -152,10 +189,14 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-async function loadNotes() {
+// loadNotes puede recibir un objeto con parámetros para la query string
+async function loadNotes(params = {}) {
   try {
     const headers = token ? { 'authorization': token } : {};
-    const res = await fetch('/api/notes', { headers });
+    let url = '/api/notes';
+    const qs = new URLSearchParams(params).toString();
+    if (qs) url += '?' + qs;
+    const res = await fetch(url, { headers });
     const notes = await res.json();
     renderNotes(notes);
   } catch (err) {
@@ -177,10 +218,13 @@ function renderNotes(notes) {
 
     const ownerName = note.owner ? note.owner.nombre : 'Anónimo';
 
+    // format date
+    const dateStr = note.createdAt ? new Date(note.createdAt).toLocaleString() : '';
     div.innerHTML = `
       <h4>${escapeHtml(note.title)}</h4>
       <p>${escapeHtml(note.content)}</p>
       <p class="meta">Autor: ${escapeHtml(ownerName)}</p>
+      <p class="meta">Creada: ${escapeHtml(dateStr)}</p>
     `;
 
     if (note.canEdit) {
@@ -198,6 +242,24 @@ function renderNotes(notes) {
 
     list.appendChild(div);
   });
+
+  // medir cuántas notas caben en el contenedor sin scroll
+  const card = document.querySelector('.card');
+  if (card) {
+    const cardHeight = card.clientHeight;
+    const noteEl = list.querySelector('.note');
+    if (noteEl) {
+      const noteHeight = noteEl.clientHeight;
+      const capacity = Math.floor(cardHeight / noteHeight);
+      console.info(`Capacidad aproximada: ${capacity} notas visibles verticalmente`);
+
+      // mostrar información en la interfaz
+      const capElem = document.getElementById('capacityInfo');
+      if (capElem) {
+        capElem.innerText = `Se muestran ${capacity} notas verticalmente; desplázate para ver más.`;
+      }
+    }
+  }
 }
 
 // Mostrar mensaje y ocultar formulario para invitados
@@ -208,6 +270,24 @@ if (isGuest) {
   if (notesMessage) {
     notesMessage.innerText = 'Inicia sesión para crear notas. (Los invitados no pueden crear, editar ni eliminar notas)';
   }
+}
+
+// manejadores de búsqueda de autor
+const searchBtn = document.getElementById('searchBtn');
+const searchAuthor = document.getElementById('searchAuthor');
+if (searchBtn && searchAuthor) {
+  searchBtn.addEventListener('click', () => {
+    const q = searchAuthor.value.trim();
+    const params = {};
+    if (q) params.author = q;
+    loadNotes(params);
+  });
+  // permitir hacer enter en el input
+  searchAuthor.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      searchBtn.click();
+    }
+  });
 }
 
 // Crear nota
@@ -227,7 +307,7 @@ if (noteForm) {
     try {
       const res = await fetch('/api/notes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'authorization': token },
+        headers: { 'Content-Type': 'application/json', 'authorization': 'Bearer ' + token },
         body: JSON.stringify({ title, content })
       });
 
@@ -270,7 +350,7 @@ function startEdit(id, oldTitle, oldContent) {
     try {
       const res = await fetch('/api/notes/' + id, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'authorization': token },
+        headers: { 'Content-Type': 'application/json', 'authorization': 'Bearer ' + token },
         body: JSON.stringify({ title: newTitle, content: newContent })
       });
 
@@ -300,7 +380,7 @@ async function deleteNote(id) {
 
   if (!confirm('¿Eliminar nota?')) return;
   try {
-    const res = await fetch('/api/notes/' + id, { method: 'DELETE', headers: { 'authorization': token } });
+    const res = await fetch('/api/notes/' + id, { method: 'DELETE', headers: { 'authorization': 'Bearer ' + token } });
     let data;
     try {
       data = await res.json();
